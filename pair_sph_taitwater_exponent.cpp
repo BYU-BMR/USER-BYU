@@ -13,7 +13,7 @@
 
 #include <math.h>
 #include <stdlib.h>
-#include "pair_sph_taitwater.h"
+#include "pair_sph_taitwater_exponent.h"
 #include "atom.h"
 #include "force.h"
 #include "comm.h"
@@ -26,7 +26,7 @@ using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
 
-PairSPHTaitwater::PairSPHTaitwater(LAMMPS *lmp) : Pair(lmp)
+PairSPHTaitwaterExponent::PairSPHTaitwaterExponent(LAMMPS *lmp) : Pair(lmp)
 {
   restartinfo = 0;
 
@@ -35,7 +35,7 @@ PairSPHTaitwater::PairSPHTaitwater(LAMMPS *lmp) : Pair(lmp)
 
 /* ---------------------------------------------------------------------- */
 
-PairSPHTaitwater::~PairSPHTaitwater() {
+PairSPHTaitwaterExponent::~PairSPHTaitwaterExponent() {
   if (allocated) {
     memory->destroy(setflag);
     memory->destroy(cutsq);
@@ -51,7 +51,7 @@ PairSPHTaitwater::~PairSPHTaitwater() {
 
 /* ---------------------------------------------------------------------- */
 
-void PairSPHTaitwater::compute(int eflag, int vflag) {
+void PairSPHTaitwaterExponent::compute(int eflag, int vflag) {
   int i, j, ii, jj, inum, jnum, itype, jtype;
   double xtmp, ytmp, ztmp, delx, dely, delz, fpair;
 
@@ -212,7 +212,7 @@ void PairSPHTaitwater::compute(int eflag, int vflag) {
  allocate all arrays
  ------------------------------------------------------------------------- */
 
-void PairSPHTaitwater::allocate() {
+void PairSPHTaitwaterExponent::allocate() {
   allocated = 1;
   int n = atom->ntypes;
 
@@ -235,7 +235,7 @@ void PairSPHTaitwater::allocate() {
  global settings
  ------------------------------------------------------------------------- */
 
-void PairSPHTaitwater::settings(int narg, char **arg) {
+void PairSPHTaitwaterExponent::settings(int narg, char **arg) {
   if (narg != 0)
     error->all(FLERR,
         "Illegal number of setting arguments for pair_style sph/taitwater");
@@ -245,7 +245,7 @@ void PairSPHTaitwater::settings(int narg, char **arg) {
  set coeffs for one or more type pairs
  ------------------------------------------------------------------------- */
 
-void PairSPHTaitwater::coeff(int narg, char **arg) {
+void PairSPHTaitwaterExponent::coeff(int narg, char **arg) {
   if (narg != 7)
     error->all(FLERR,
         "Incorrect args for pair_style sph/taitwater coefficients");
@@ -297,7 +297,7 @@ void PairSPHTaitwater::coeff(int narg, char **arg) {
  init for one type pair i,j and corresponding j,i
  ------------------------------------------------------------------------- */
 
-double PairSPHTaitwater::init_one(int i, int j) {
+double PairSPHTaitwaterExponent::init_one(int i, int j) {
 
   if (setflag[i][j] == 0) {
     error->all(FLERR,"Not all pair sph/taitwater coeffs are set");
@@ -311,7 +311,7 @@ double PairSPHTaitwater::init_one(int i, int j) {
 
 /* ---------------------------------------------------------------------- */
 
-double PairSPHTaitwater::single(int i, int j, int itype, int jtype,
+double PairSPHTaitwaterExponent::single(int i, int j, int itype, int jtype,
     double rsq, double factor_coul, double factor_lj, double &fforce) {
   fforce = 0.0;
 

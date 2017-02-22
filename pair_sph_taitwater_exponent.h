@@ -13,21 +13,21 @@
 
 #ifdef PAIR_CLASS
 
-PairStyle(sph/taitwater,PairSPHTaitwater)
+PairStyle(sph/taitwater/exponent,PairSPHTaitwaterExponent)
 
 #else
 
-#ifndef LMP_PAIR_TAITWATER_H
-#define LMP_PAIR_TAITWATER_H
+#ifndef LMP_PAIR_TAITWATER_EXPONENT_H
+#define LMP_PAIR_TAITWATER_EXPONENT_H
 
 #include "pair.h"
 
 namespace LAMMPS_NS {
 
-class PairSPHTaitwater : public Pair {
+class PairSPHTaitwaterExponent : public Pair {
  public:
-  PairSPHTaitwater(class LAMMPS *);
-  virtual ~PairSPHTaitwater();
+  PairSPHTaitwaterExponent(class LAMMPS *);
+  virtual ~PairSPHTaitwaterExponent();
   virtual void compute(int, int);
   void settings(int, char **);
   void coeff(int, char **);

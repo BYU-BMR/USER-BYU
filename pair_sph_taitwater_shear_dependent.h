@@ -13,21 +13,21 @@
 
 #ifdef PAIR_CLASS
 
-PairStyle(sph/taitwater/morris,PairSPHTaitwaterMorris)
+PairStyle(sph/taitwater/shear/dependent,PairSPHTaitwaterShearDependent)
 
 #else
 
-#ifndef LMP_PAIR_TAITWATER_MORRIS_H
-#define LMP_PAIR_TAITWATER_MORRIS_H
+#ifndef LMP_PAIR_TAITWATER_SHEAR_DEPENDENT_H
+#define LMP_PAIR_TAITWATER_SHEAR_DEPENDENT_H
 
 #include "pair.h"
 
 namespace LAMMPS_NS {
 
-class PairSPHTaitwaterMorris : public Pair {
+class PairSPHTaitwaterShearDependent : public Pair {
  public:
-  PairSPHTaitwaterMorris(class LAMMPS *);
-  virtual ~PairSPHTaitwaterMorris();
+  PairSPHTaitwaterShearDependent(class LAMMPS *);
+  virtual ~PairSPHTaitwaterShearDependent();
   virtual void compute(int, int);
   void settings(int, char **);
   void coeff(int, char **);

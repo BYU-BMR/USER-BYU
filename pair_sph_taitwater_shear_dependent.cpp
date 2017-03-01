@@ -38,6 +38,9 @@ PairSPHTaitwaterShearDependent::~PairSPHTaitwaterShearDependent() {
     memory->destroy(setflag);
     memory->destroy(cutsq);
 
+    memory->destroy(mu_pl);
+    memory->destroy(mu_0);
+    memory->destroy(M);
     memory->destroy(cut);
     memory->destroy(rho0);
     memory->destroy(soundspeed);
@@ -213,6 +216,9 @@ void PairSPHTaitwaterShearDependent::allocate() {
 
   memory->create(cutsq, n + 1, n + 1, "pair:cutsq");
 
+  memory->create(mu_pl, n + 1, "pair:mu_pl");
+  memory->create(mu_0, n + 1, "pair:mu_0");
+  memory->create(M, n + 1, "pair:M");
   memory->create(rho0, n + 1, "pair:rho0");
   memory->create(soundspeed, n + 1, "pair:soundspeed");
   memory->create(B, n + 1, "pair:B");
@@ -235,7 +241,7 @@ void PairSPHTaitwaterShearDependent::settings(int narg, char **arg) {
  ------------------------------------------------------------------------- */
 
 void PairSPHTaitwaterShearDependent::coeff(int narg, char **arg) {
-  if (narg != 6)
+  if (narg != 9)
     error->all(FLERR,
         "Incorrect args for pair_style sph/taitwater/shear/dependent coefficients");
   if (!allocated)
@@ -247,14 +253,24 @@ void PairSPHTaitwaterShearDependent::coeff(int narg, char **arg) {
 
   double rho0_one = force->numeric(FLERR,arg[2]);
   double soundspeed_one = force->numeric(FLERR,arg[3]);
-  double viscosity_one = force->numeric(FLERR,arg[4]);
-  double cut_one = force->numeric(FLERR,arg[5]);
+  double mu_pl_one = force->numeric(FLERR,arg[4]);
+  double mu_0_one = force->numeric(FLERR,arg[5]);
+  double M_one = force->numeric(FLERR,arg[6]);
+  double viscosity_one = force->numeric(FLERR,arg[7]);
+  double cut_one = force->numeric(FLERR,arg[8]);
   double B_one = soundspeed_one * soundspeed_one * rho0_one / 7.0;
+
+  printf("mu_pl: %f\n", mu_pl_one);
+  printf("mu_0: %f\n", mu_0_one);
+  printf("M: %f\n", M_one);
 
   int count = 0;
   for (int i = ilo; i <= ihi; i++) {
     rho0[i] = rho0_one;
     soundspeed[i] = soundspeed_one;
+    mu_pl[i] = mu_pl_one;
+    mu_0[i] = mu_0_one;
+    M[i] = M_one;
     B[i] = B_one;
     for (int j = MAX(jlo,i); j <= jhi; j++) {
       viscosity[i][j] = viscosity_one;

@@ -35,6 +35,7 @@ class PairSPHTaitwaterShearDependent : public Pair {
   virtual double single(int, int, int, int, double, double, double, double &);
 
  protected:
+  double *mu_pl, *mu_0, *M;
   double *rho0, *soundspeed, *B;
   double **cut,**viscosity;
   int first;

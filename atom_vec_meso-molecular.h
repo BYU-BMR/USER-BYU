@@ -13,21 +13,21 @@
 
 #ifdef ATOM_CLASS
 
-AtomStyle(meso,AtomVecMeso)
+AtomStyle(meso-molecular,AtomVecMesoMolecular)
 
 #else
 
-#ifndef LMP_ATOM_VEC_MESO_H
-#define LMP_ATOM_VEC_MESO_H
+#ifndef LMP_ATOM_VEC_MESO_MOLECULAR_H
+#define LMP_ATOM_VEC_MESO_MOLECULAR_H
 
 #include "atom_vec.h"
 
 namespace LAMMPS_NS {
 
-class AtomVecMeso : public AtomVec {
+class AtomVecMesoMolecular : public AtomVec {
  public:
-  AtomVecMeso(class LAMMPS *);
-  ~AtomVecMeso() {}
+  AtomVecMesoMolecular(class LAMMPS *);
+  ~AtomVecMesoMolecular() {}
   void grow(int);
   void grow_reset();
   void copy(int, int, int);
@@ -69,6 +69,7 @@ class AtomVecMeso : public AtomVec {
   int *type,*mask;
   imageint *image;
   double **x,**v,**f;
+  tagint *molecule;
   double *rho, *drho, *e, *de, *cv;
   double **vest; // estimated velocity during force computation
 };

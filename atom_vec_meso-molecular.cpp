@@ -13,7 +13,7 @@
 
 #include <string.h>
 #include <stdlib.h>
-#include "atom_vec_meso.h"
+#include "atom_vec_meso-molecular.h"
 #include "atom.h"
 #include "comm.h"
 #include "domain.h"
@@ -26,7 +26,7 @@ using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
 
-AtomVecMeso::AtomVecMeso(LAMMPS *lmp) : AtomVec(lmp)
+AtomVecMesoMolecular::AtomVecMesoMolecular(LAMMPS *lmp) : AtomVec(lmp)
 {
   molecular = 0;
   mass_type = 1;
@@ -34,18 +34,19 @@ AtomVecMeso::AtomVecMeso(LAMMPS *lmp) : AtomVec(lmp)
 
   comm_x_only = 0; // we communicate not only x forward but also vest ...
   comm_f_only = 0; // we also communicate de and drho in reverse direction
-  size_forward = 8; // 3 + rho + e + vest[3], that means we may only communicate 5 in hybrid
-  size_reverse = 5; // 3 + drho + de
-  size_border = 12; // 6 + rho + e + vest[3] + cv
+  size_forward = 9; // 3 + rho + e + molecule + vest[3], that means we may only communicate 5 in hybrid
+  size_reverse = 6; // 3 + drho + de + molecule 
+  size_border = 13; // 6 + rho + e + molecule + vest[3] + cv
   size_velocity = 3;
-  size_data_atom = 8;
+  size_data_atom = 9;
   size_data_vel = 4;
-  xcol_data = 6;
+  xcol_data = 7;
 
   atom->e_flag = 1;
   atom->rho_flag = 1;
   atom->cv_flag = 1;
   atom->vest_flag = 1;
+  atom->molecule_flag = 1;
 }
 
 /* ----------------------------------------------------------------------
@@ -54,7 +55,7 @@ AtomVecMeso::AtomVecMeso(LAMMPS *lmp) : AtomVec(lmp)
    n > 0 allocates arrays to size n
    ------------------------------------------------------------------------- */
 
-void AtomVecMeso::grow(int n)
+void AtomVecMesoMolecular::grow(int n)
 {
   if (n == 0) grow_nmax();
   else nmax = n;
@@ -69,6 +70,8 @@ void AtomVecMeso::grow(int n)
   x = memory->grow(atom->x, nmax, 3, "atom:x");
   v = memory->grow(atom->v, nmax, 3, "atom:v");
   f = memory->grow(atom->f, nmax*comm->nthreads, 3, "atom:f");
+
+  molecule = memory->grow(atom->molecule,nmax,"atom:molecule");
 
   rho = memory->grow(atom->rho, nmax, "atom:rho");
   drho = memory->grow(atom->drho, nmax*comm->nthreads, "atom:drho");
@@ -86,8 +89,9 @@ void AtomVecMeso::grow(int n)
    reset local array ptrs
    ------------------------------------------------------------------------- */
 
-void AtomVecMeso::grow_reset() {
+void AtomVecMesoMolecular::grow_reset() {
   tag = atom->tag;
+  molecule = atom->molecule;
   type = atom->type;
   mask = atom->mask;
   image = atom->image;
@@ -104,8 +108,8 @@ void AtomVecMeso::grow_reset() {
 
 /* ---------------------------------------------------------------------- */
 
-void AtomVecMeso::copy(int i, int j, int delflag) {
-  //printf("in AtomVecMeso::copy\n");
+void AtomVecMesoMolecular::copy(int i, int j, int delflag) {
+  //printf("in AtomVecMesoMolecular::copy\n");
   tag[j] = tag[i];
   type[j] = type[i];
   mask[j] = mask[i];
@@ -116,6 +120,8 @@ void AtomVecMeso::copy(int i, int j, int delflag) {
   v[j][0] = v[i][0];
   v[j][1] = v[i][1];
   v[j][2] = v[i][2];
+
+  molecule[j] = molecule[i];
 
   rho[j] = rho[i];
   drho[j] = drho[i];
@@ -133,7 +139,7 @@ void AtomVecMeso::copy(int i, int j, int delflag) {
 
 /* ---------------------------------------------------------------------- */
 
-void AtomVecMeso::force_clear(int n, size_t nbytes)
+void AtomVecMesoMolecular::force_clear(int n, size_t nbytes)
 {
   memset(&de[n],0,nbytes);
   memset(&drho[n],0,nbytes);
@@ -141,8 +147,8 @@ void AtomVecMeso::force_clear(int n, size_t nbytes)
 
 /* ---------------------------------------------------------------------- */
 
-int AtomVecMeso::pack_comm_hybrid(int n, int *list, double *buf) {
-  //printf("in AtomVecMeso::pack_comm_hybrid\n");
+int AtomVecMesoMolecular::pack_comm_hybrid(int n, int *list, double *buf) {
+  //printf("in AtomVecMesoMolecular::pack_comm_hybrid\n");
   int i, j, m;
 
   m = 0;
@@ -153,14 +159,15 @@ int AtomVecMeso::pack_comm_hybrid(int n, int *list, double *buf) {
     buf[m++] = vest[j][0];
     buf[m++] = vest[j][1];
     buf[m++] = vest[j][2];
+    buf[m++] = ubuf(molecule[j]).d;
   }
   return m;
 }
 
 /* ---------------------------------------------------------------------- */
 
-int AtomVecMeso::unpack_comm_hybrid(int n, int first, double *buf) {
-  //printf("in AtomVecMeso::unpack_comm_hybrid\n");
+int AtomVecMesoMolecular::unpack_comm_hybrid(int n, int first, double *buf) {
+  //printf("in AtomVecMesoMolecular::unpack_comm_hybrid\n");
   int i, m, last;
 
   m = 0;
@@ -171,14 +178,15 @@ int AtomVecMeso::unpack_comm_hybrid(int n, int first, double *buf) {
     vest[i][0] = buf[m++];
     vest[i][1] = buf[m++];
     vest[i][2] = buf[m++];
+    molecule[i] = (tagint) ubuf(buf[m++]).i;
   }
   return m;
 }
 
 /* ---------------------------------------------------------------------- */
 
-int AtomVecMeso::pack_border_hybrid(int n, int *list, double *buf) {
-  //printf("in AtomVecMeso::pack_border_hybrid\n");
+int AtomVecMesoMolecular::pack_border_hybrid(int n, int *list, double *buf) {
+  //printf("in AtomVecMesoMolecular::pack_border_hybrid\n");
   int i, j, m;
 
   m = 0;
@@ -189,14 +197,15 @@ int AtomVecMeso::pack_border_hybrid(int n, int *list, double *buf) {
     buf[m++] = vest[j][0];
     buf[m++] = vest[j][1];
     buf[m++] = vest[j][2];
+    buf[m++] = ubuf(molecule[j]).d;
   }
   return m;
 }
 
 /* ---------------------------------------------------------------------- */
 
-int AtomVecMeso::unpack_border_hybrid(int n, int first, double *buf) {
-  //printf("in AtomVecMeso::unpack_border_hybrid\n");
+int AtomVecMesoMolecular::unpack_border_hybrid(int n, int first, double *buf) {
+  //printf("in AtomVecMesoMolecular::unpack_border_hybrid\n");
   int i, m, last;
 
   m = 0;
@@ -207,14 +216,15 @@ int AtomVecMeso::unpack_border_hybrid(int n, int first, double *buf) {
     vest[i][0] = buf[m++];
     vest[i][1] = buf[m++];
     vest[i][2] = buf[m++];
+    molecule[i] = (tagint) ubuf(buf[m++]).i;
   }
   return m;
 }
 
 /* ---------------------------------------------------------------------- */
 
-int AtomVecMeso::pack_reverse_hybrid(int n, int first, double *buf) {
-  //printf("in AtomVecMeso::pack_reverse_hybrid\n");
+int AtomVecMesoMolecular::pack_reverse_hybrid(int n, int first, double *buf) {
+  //printf("in AtomVecMesoMolecular::pack_reverse_hybrid\n");
   int i, m, last;
 
   m = 0;
@@ -228,8 +238,8 @@ int AtomVecMeso::pack_reverse_hybrid(int n, int first, double *buf) {
 
 /* ---------------------------------------------------------------------- */
 
-int AtomVecMeso::unpack_reverse_hybrid(int n, int *list, double *buf) {
-  //printf("in AtomVecMeso::unpack_reverse_hybrid\n");
+int AtomVecMesoMolecular::unpack_reverse_hybrid(int n, int *list, double *buf) {
+  //printf("in AtomVecMesoMolecular::unpack_reverse_hybrid\n");
   int i, j, m;
 
   m = 0;
@@ -243,9 +253,9 @@ int AtomVecMeso::unpack_reverse_hybrid(int n, int *list, double *buf) {
 
 /* ---------------------------------------------------------------------- */
 
-int AtomVecMeso::pack_comm(int n, int *list, double *buf, int pbc_flag,
+int AtomVecMesoMolecular::pack_comm(int n, int *list, double *buf, int pbc_flag,
                            int *pbc) {
-  //printf("in AtomVecMeso::pack_comm\n");
+  //printf("in AtomVecMesoMolecular::pack_comm\n");
   int i, j, m;
   double dx, dy, dz;
 
@@ -258,6 +268,7 @@ int AtomVecMeso::pack_comm(int n, int *list, double *buf, int pbc_flag,
       buf[m++] = x[j][2];
       buf[m++] = rho[j];
       buf[m++] = e[j];
+      buf[m++] = ubuf(molecule[j]).d;
       buf[m++] = vest[j][0];
       buf[m++] = vest[j][1];
       buf[m++] = vest[j][2];
@@ -279,6 +290,7 @@ int AtomVecMeso::pack_comm(int n, int *list, double *buf, int pbc_flag,
       buf[m++] = x[j][2] + dz;
       buf[m++] = rho[j];
       buf[m++] = e[j];
+      buf[m++] = ubuf(molecule[j]).d;
       buf[m++] = vest[j][0];
       buf[m++] = vest[j][1];
       buf[m++] = vest[j][2];
@@ -289,9 +301,9 @@ int AtomVecMeso::pack_comm(int n, int *list, double *buf, int pbc_flag,
 
 /* ---------------------------------------------------------------------- */
 
-int AtomVecMeso::pack_comm_vel(int n, int *list, double *buf, int pbc_flag,
+int AtomVecMesoMolecular::pack_comm_vel(int n, int *list, double *buf, int pbc_flag,
                                int *pbc) {
-  //printf("in AtomVecMeso::pack_comm_vel\n");
+  //printf("in AtomVecMesoMolecular::pack_comm_vel\n");
   int i, j, m;
   double dx, dy, dz;
 
@@ -307,6 +319,7 @@ int AtomVecMeso::pack_comm_vel(int n, int *list, double *buf, int pbc_flag,
       buf[m++] = v[j][2];
       buf[m++] = rho[j];
       buf[m++] = e[j];
+      buf[m++] = ubuf(molecule[j]).d;
       buf[m++] = vest[j][0];
       buf[m++] = vest[j][1];
       buf[m++] = vest[j][2];
@@ -331,6 +344,7 @@ int AtomVecMeso::pack_comm_vel(int n, int *list, double *buf, int pbc_flag,
       buf[m++] = v[j][2];
       buf[m++] = rho[j];
       buf[m++] = e[j];
+      buf[m++] = ubuf(molecule[j]).d;
       buf[m++] = vest[j][0];
       buf[m++] = vest[j][1];
       buf[m++] = vest[j][2];
@@ -341,8 +355,8 @@ int AtomVecMeso::pack_comm_vel(int n, int *list, double *buf, int pbc_flag,
 
 /* ---------------------------------------------------------------------- */
 
-void AtomVecMeso::unpack_comm(int n, int first, double *buf) {
-  //printf("in AtomVecMeso::unpack_comm\n");
+void AtomVecMesoMolecular::unpack_comm(int n, int first, double *buf) {
+  //printf("in AtomVecMesoMolecular::unpack_comm\n");
   int i, m, last;
 
   m = 0;
@@ -353,6 +367,7 @@ void AtomVecMeso::unpack_comm(int n, int first, double *buf) {
     x[i][2] = buf[m++];
     rho[i] = buf[m++];
     e[i] = buf[m++];
+    molecule[i] = (tagint) ubuf(buf[m++]).i;
     vest[i][0] = buf[m++];
     vest[i][1] = buf[m++];
     vest[i][2] = buf[m++];
@@ -361,8 +376,8 @@ void AtomVecMeso::unpack_comm(int n, int first, double *buf) {
 
 /* ---------------------------------------------------------------------- */
 
-void AtomVecMeso::unpack_comm_vel(int n, int first, double *buf) {
-  //printf("in AtomVecMeso::unpack_comm_vel\n");
+void AtomVecMesoMolecular::unpack_comm_vel(int n, int first, double *buf) {
+  //printf("in AtomVecMesoMolecular::unpack_comm_vel\n");
   int i, m, last;
 
   m = 0;
@@ -376,6 +391,7 @@ void AtomVecMeso::unpack_comm_vel(int n, int first, double *buf) {
     v[i][2] = buf[m++];
     rho[i] = buf[m++];
     e[i] = buf[m++];
+    molecule[i] = (tagint) ubuf(buf[m++]).i;
     vest[i][0] = buf[m++];
     vest[i][1] = buf[m++];
     vest[i][2] = buf[m++];
@@ -384,8 +400,8 @@ void AtomVecMeso::unpack_comm_vel(int n, int first, double *buf) {
 
 /* ---------------------------------------------------------------------- */
 
-int AtomVecMeso::pack_reverse(int n, int first, double *buf) {
-  //printf("in AtomVecMeso::pack_reverse\n");
+int AtomVecMesoMolecular::pack_reverse(int n, int first, double *buf) {
+  //printf("in AtomVecMesoMolecular::pack_reverse\n");
   int i, m, last;
 
   m = 0;
@@ -396,14 +412,15 @@ int AtomVecMeso::pack_reverse(int n, int first, double *buf) {
     buf[m++] = f[i][2];
     buf[m++] = drho[i];
     buf[m++] = de[i];
+    buf[m++] = ubuf(molecule[i]).d;
   }
   return m;
 }
 
 /* ---------------------------------------------------------------------- */
 
-void AtomVecMeso::unpack_reverse(int n, int *list, double *buf) {
-  //printf("in AtomVecMeso::unpack_reverse\n");
+void AtomVecMesoMolecular::unpack_reverse(int n, int *list, double *buf) {
+  //printf("in AtomVecMesoMolecular::unpack_reverse\n");
   int i, j, m;
 
   m = 0;
@@ -414,14 +431,15 @@ void AtomVecMeso::unpack_reverse(int n, int *list, double *buf) {
     f[j][2] += buf[m++];
     drho[j] += buf[m++];
     de[j] += buf[m++];
+    molecule[i] = (tagint) ubuf(buf[m++]).i;
   }
 }
 
 /* ---------------------------------------------------------------------- */
 
-int AtomVecMeso::pack_border(int n, int *list, double *buf, int pbc_flag,
+int AtomVecMesoMolecular::pack_border(int n, int *list, double *buf, int pbc_flag,
                              int *pbc) {
-  //printf("in AtomVecMeso::pack_border\n");
+  //printf("in AtomVecMesoMolecular::pack_border\n");
   int i, j, m;
   double dx, dy, dz;
 
@@ -435,6 +453,7 @@ int AtomVecMeso::pack_border(int n, int *list, double *buf, int pbc_flag,
       buf[m++] = ubuf(tag[j]).d;
       buf[m++] = ubuf(type[j]).d;
       buf[m++] = ubuf(mask[j]).d;
+      buf[m++] = ubuf(molecule[j]).d;
       buf[m++] = rho[j];
       buf[m++] = e[j];
       buf[m++] = cv[j];
@@ -460,6 +479,7 @@ int AtomVecMeso::pack_border(int n, int *list, double *buf, int pbc_flag,
       buf[m++] = ubuf(tag[j]).d;
       buf[m++] = ubuf(type[j]).d;
       buf[m++] = ubuf(mask[j]).d;
+      buf[m++] = ubuf(molecule[j]).d;
       buf[m++] = rho[j];
       buf[m++] = e[j];
       buf[m++] = cv[j];
@@ -478,7 +498,7 @@ int AtomVecMeso::pack_border(int n, int *list, double *buf, int pbc_flag,
 
 /* ---------------------------------------------------------------------- */
 
-int AtomVecMeso::pack_border_vel(int n, int *list, double *buf, int pbc_flag,
+int AtomVecMesoMolecular::pack_border_vel(int n, int *list, double *buf, int pbc_flag,
                                  int *pbc)
 {
   int i,j,m;
@@ -494,6 +514,7 @@ int AtomVecMeso::pack_border_vel(int n, int *list, double *buf, int pbc_flag,
       buf[m++] = ubuf(tag[j]).d;
       buf[m++] = ubuf(type[j]).d;
       buf[m++] = ubuf(mask[j]).d;
+      buf[m++] = ubuf(molecule[j]).d;
       buf[m++] = v[j][0];
       buf[m++] = v[j][1];
       buf[m++] = v[j][2];
@@ -523,6 +544,7 @@ int AtomVecMeso::pack_border_vel(int n, int *list, double *buf, int pbc_flag,
         buf[m++] = ubuf(tag[j]).d;
         buf[m++] = ubuf(type[j]).d;
         buf[m++] = ubuf(mask[j]).d;
+        buf[m++] = ubuf(molecule[j]).d;
         buf[m++] = v[j][0];
         buf[m++] = v[j][1];
         buf[m++] = v[j][2];
@@ -545,6 +567,7 @@ int AtomVecMeso::pack_border_vel(int n, int *list, double *buf, int pbc_flag,
         buf[m++] = ubuf(tag[j]).d;
         buf[m++] = ubuf(type[j]).d;
         buf[m++] = ubuf(mask[j]).d;
+        buf[m++] = ubuf(molecule[j]).d;
         if (mask[i] & deform_groupbit) {
           buf[m++] = v[j][0] + dvx;
           buf[m++] = v[j][1] + dvy;
@@ -576,8 +599,8 @@ int AtomVecMeso::pack_border_vel(int n, int *list, double *buf, int pbc_flag,
 
 /* ---------------------------------------------------------------------- */
 
-void AtomVecMeso::unpack_border(int n, int first, double *buf) {
-  //printf("in AtomVecMeso::unpack_border\n");
+void AtomVecMesoMolecular::unpack_border(int n, int first, double *buf) {
+  //printf("in AtomVecMesoMolecular::unpack_border\n");
   int i, m, last;
 
   m = 0;
@@ -591,6 +614,7 @@ void AtomVecMeso::unpack_border(int n, int first, double *buf) {
     tag[i] = (tagint) ubuf(buf[m++]).i;
     type[i] = (int) ubuf(buf[m++]).i;
     mask[i] = (int) ubuf(buf[m++]).i;
+    molecule[i] = (tagint) ubuf(buf[m++]).i;
     rho[i] = buf[m++];
     e[i] = buf[m++];
     cv[i] = buf[m++];
@@ -607,8 +631,8 @@ void AtomVecMeso::unpack_border(int n, int first, double *buf) {
 
 /* ---------------------------------------------------------------------- */
 
-void AtomVecMeso::unpack_border_vel(int n, int first, double *buf) {
-  //printf("in AtomVecMeso::unpack_border_vel\n");
+void AtomVecMesoMolecular::unpack_border_vel(int n, int first, double *buf) {
+  //printf("in AtomVecMesoMolecular::unpack_border_vel\n");
   int i, m, last;
 
   m = 0;
@@ -622,6 +646,7 @@ void AtomVecMeso::unpack_border_vel(int n, int first, double *buf) {
     tag[i] = (tagint) ubuf(buf[m++]).i;
     type[i] = (int) ubuf(buf[m++]).i;
     mask[i] = (int) ubuf(buf[m++]).i;
+    molecule[i] = (tagint) ubuf(buf[m++]).i;
     v[i][0] = buf[m++];
     v[i][1] = buf[m++];
     v[i][2] = buf[m++];
@@ -644,8 +669,8 @@ void AtomVecMeso::unpack_border_vel(int n, int first, double *buf) {
    xyz must be 1st 3 values, so comm::exchange() can test on them
    ------------------------------------------------------------------------- */
 
-int AtomVecMeso::pack_exchange(int i, double *buf) {
-  //printf("in AtomVecMeso::pack_exchange\n");
+int AtomVecMesoMolecular::pack_exchange(int i, double *buf) {
+  //printf("in AtomVecMesoMolecular::pack_exchange\n");
   int m = 1;
   buf[m++] = x[i][0];
   buf[m++] = x[i][1];
@@ -657,6 +682,7 @@ int AtomVecMeso::pack_exchange(int i, double *buf) {
   buf[m++] = ubuf(type[i]).d;
   buf[m++] = ubuf(mask[i]).d;
   buf[m++] = ubuf(image[i]).d;
+  buf[m++] = ubuf(molecule[i]).d;
   buf[m++] = rho[i];
   buf[m++] = e[i];
   buf[m++] = cv[i];
@@ -674,8 +700,8 @@ int AtomVecMeso::pack_exchange(int i, double *buf) {
 
 /* ---------------------------------------------------------------------- */
 
-int AtomVecMeso::unpack_exchange(double *buf) {
-  //printf("in AtomVecMeso::unpack_exchange\n");
+int AtomVecMesoMolecular::unpack_exchange(double *buf) {
+  //printf("in AtomVecMesoMolecular::unpack_exchange\n");
   int nlocal = atom->nlocal;
   if (nlocal == nmax)
     grow(0);
@@ -691,6 +717,7 @@ int AtomVecMeso::unpack_exchange(double *buf) {
   type[nlocal] = (int) ubuf(buf[m++]).i;
   mask[nlocal] = (int) ubuf(buf[m++]).i;
   image[nlocal] = (imageint) ubuf(buf[m++]).i;
+  molecule[nlocal] = (tagint) ubuf(buf[m++]).i;
   rho[nlocal] = buf[m++];
   e[nlocal] = buf[m++];
   cv[nlocal] = buf[m++];
@@ -712,7 +739,7 @@ int AtomVecMeso::unpack_exchange(double *buf) {
    include extra data stored by fixes
    ------------------------------------------------------------------------- */
 
-int AtomVecMeso::size_restart() {
+int AtomVecMesoMolecular::size_restart() {
   int i;
 
   int nlocal = atom->nlocal;
@@ -732,7 +759,7 @@ int AtomVecMeso::size_restart() {
    molecular types may be negative, but write as positive
    ------------------------------------------------------------------------- */
 
-int AtomVecMeso::pack_restart(int i, double *buf) {
+int AtomVecMesoMolecular::pack_restart(int i, double *buf) {
   int m = 1;
   buf[m++] = x[i][0];
   buf[m++] = x[i][1];
@@ -744,6 +771,7 @@ int AtomVecMeso::pack_restart(int i, double *buf) {
   buf[m++] = v[i][0];
   buf[m++] = v[i][1];
   buf[m++] = v[i][2];
+  buf[m++] = ubuf(molecule[i]).d;
   buf[m++] = rho[i];
   buf[m++] = e[i];
   buf[m++] = cv[i];
@@ -763,7 +791,7 @@ int AtomVecMeso::pack_restart(int i, double *buf) {
    unpack data for one atom from restart file including extra quantities
    ------------------------------------------------------------------------- */
 
-int AtomVecMeso::unpack_restart(double *buf) {
+int AtomVecMesoMolecular::unpack_restart(double *buf) {
   int nlocal = atom->nlocal;
   if (nlocal == nmax) {
     grow(0);
@@ -782,6 +810,7 @@ int AtomVecMeso::unpack_restart(double *buf) {
   v[nlocal][0] = buf[m++];
   v[nlocal][1] = buf[m++];
   v[nlocal][2] = buf[m++];
+  molecule[nlocal] = (tagint) ubuf(buf[m++]).i;
   rho[nlocal] = buf[m++];
   e[nlocal] = buf[m++];
   cv[nlocal] = buf[m++];
@@ -805,7 +834,7 @@ int AtomVecMeso::unpack_restart(double *buf) {
    set other values to defaults
    ------------------------------------------------------------------------- */
 
-void AtomVecMeso::create_atom(int itype, double *coord) {
+void AtomVecMesoMolecular::create_atom(int itype, double *coord) {
   int nlocal = atom->nlocal;
   if (nlocal == nmax)
     grow(0);
@@ -821,6 +850,7 @@ void AtomVecMeso::create_atom(int itype, double *coord) {
   v[nlocal][0] = 0.0;
   v[nlocal][1] = 0.0;
   v[nlocal][2] = 0.0;
+  molecule[nlocal] = 0;
   rho[nlocal] = 0.0;
   e[nlocal] = 0.0;
   cv[nlocal] = 1.0;
@@ -838,18 +868,19 @@ void AtomVecMeso::create_atom(int itype, double *coord) {
    initialize other atom quantities
    ------------------------------------------------------------------------- */
 
-void AtomVecMeso::data_atom(double *coord, imageint imagetmp, char **values) {
+void AtomVecMesoMolecular::data_atom(double *coord, imageint imagetmp, char **values) {
   int nlocal = atom->nlocal;
   if (nlocal == nmax) grow(0);
 
   tag[nlocal] = ATOTAGINT(values[0]);
-  type[nlocal] = atoi(values[1]);
+  molecule[nlocal] = ATOTAGINT(values[1]);
+  type[nlocal] = atoi(values[2]);
   if (type[nlocal] <= 0 || type[nlocal] > atom->ntypes)
     error->one(FLERR,"Invalid atom type in Atoms section of data file");
 
-  rho[nlocal] = atof(values[2]);
-  e[nlocal] = atof(values[3]);
-  cv[nlocal] = atof(values[4]);
+  rho[nlocal] = atof(values[3]);
+  e[nlocal] = atof(values[4]);
+  cv[nlocal] = atof(values[5]);
 
   x[nlocal][0] = coord[0];
   x[nlocal][1] = coord[1];
@@ -879,34 +910,36 @@ void AtomVecMeso::data_atom(double *coord, imageint imagetmp, char **values) {
    initialize other atom quantities for this sub-style
    ------------------------------------------------------------------------- */
 
-int AtomVecMeso::data_atom_hybrid(int nlocal, char **values) {
+int AtomVecMesoMolecular::data_atom_hybrid(int nlocal, char **values) {
 
-  rho[nlocal] = atof(values[0]);
-  e[nlocal] = atof(values[1]);
-  cv[nlocal] = atof(values[2]);
+  molecule[nlocal] = ATOTAGINT(values[0]);
+  rho[nlocal] = atof(values[1]);
+  e[nlocal] = atof(values[2]);
+  cv[nlocal] = atof(values[3]);
 
-  return 3;
+  return 4;
 }
 
 /* ----------------------------------------------------------------------
    pack atom info for data file including 3 image flags
 ------------------------------------------------------------------------- */
 
-void AtomVecMeso::pack_data(double **buf)
+void AtomVecMesoMolecular::pack_data(double **buf)
 {
   int nlocal = atom->nlocal;
   for (int i = 0; i < nlocal; i++) {
     buf[i][0] = ubuf(tag[i]).d;
-    buf[i][1] = ubuf(type[i]).d;
-    buf[i][2] = rho[i];
-    buf[i][3] = e[i];
-    buf[i][4] = cv[i];
-    buf[i][5] = x[i][0];
-    buf[i][6] = x[i][1];
-    buf[i][7] = x[i][2];
-    buf[i][8] = ubuf((image[i] & IMGMASK) - IMGMAX).d;
-    buf[i][9] = ubuf((image[i] >> IMGBITS & IMGMASK) - IMGMAX).d;
-    buf[i][10] = ubuf((image[i] >> IMG2BITS) - IMGMAX).d;
+    buf[i][1] = ubuf(molecule[i]).d;
+    buf[i][2] = ubuf(type[i]).d;
+    buf[i][3] = rho[i];
+    buf[i][4] = e[i];
+    buf[i][5] = cv[i];
+    buf[i][6] = x[i][0];
+    buf[i][7] = x[i][1];
+    buf[i][8] = x[i][2];
+    buf[i][9] = ubuf((image[i] & IMGMASK) - IMGMAX).d;
+    buf[i][10] = ubuf((image[i] >> IMGBITS & IMGMASK) - IMGMAX).d;
+    buf[i][11] = ubuf((image[i] >> IMG2BITS) - IMGMAX).d;
   }
 }
 
@@ -914,39 +947,43 @@ void AtomVecMeso::pack_data(double **buf)
    pack hybrid atom info for data file
 ------------------------------------------------------------------------- */
 
-int AtomVecMeso::pack_data_hybrid(int i, double *buf)
+int AtomVecMesoMolecular::pack_data_hybrid(int i, double *buf)
 {
-  buf[0] = rho[i];
-  buf[1] = e[i];
-  buf[2] = cv[i];
-  return 3;
+  buf[0] = ubuf(molecule[i]).d;
+  buf[1] = rho[i];
+  buf[2] = e[i];
+  buf[3] = cv[i];
+  return 4;
 }
 
 /* ----------------------------------------------------------------------
    write atom info to data file including 3 image flags
 ------------------------------------------------------------------------- */
 
-void AtomVecMeso::write_data(FILE *fp, int n, double **buf)
+void AtomVecMesoMolecular::write_data(FILE *fp, int n, double **buf)
 {
   for (int i = 0; i < n; i++)
     fprintf(fp,TAGINT_FORMAT
-            " %d %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e "
+            " %d %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e "
             "%d %d %d\n",
-            (tagint) ubuf(buf[i][0]).i,(int) ubuf(buf[i][1]).i,
-            buf[i][2],buf[i][3],buf[i][4],
-            buf[i][5],buf[i][6],buf[i][7],
-            (int) ubuf(buf[i][8]).i,(int) ubuf(buf[i][9]).i,
-            (int) ubuf(buf[i][10]).i);
+            (tagint) ubuf(buf[i][0]).i,
+            (tagint) ubuf(buf[i][1]).i,
+            (int) ubuf(buf[i][2]).i,
+            buf[i][3],buf[i][4],buf[i][5],
+            buf[i][6],buf[i][7],buf[i][8],
+            (int) ubuf(buf[i][9]).i,(int) ubuf(buf[i][10]).i,
+            (int) ubuf(buf[i][11]).i);
 }
 
 /* ----------------------------------------------------------------------
    write hybrid atom info to data file
 ------------------------------------------------------------------------- */
 
-int AtomVecMeso::write_data_hybrid(FILE *fp, double *buf)
+int AtomVecMesoMolecular::write_data_hybrid(FILE *fp, double *buf)
 {
-  fprintf(fp," %-1.16e %-1.16e %-1.16e",buf[0],buf[1],buf[2]);
-  return 3;
+  fprintf(fp,TAGINT_FORMAT " %-1.16e %-1.16e %-1.16e %-1.16e",
+    ubuf(buf[0]).i,buf[1],buf[2],buf[3]);
+  return 4;
 }
 
 /* ----------------------------------------------------------------------
@@ -954,13 +991,14 @@ int AtomVecMeso::write_data_hybrid(FILE *fp, double *buf)
    return -1 if name is unknown to this atom style
 ------------------------------------------------------------------------- */
 
-int AtomVecMeso::property_atom(char *name)
+int AtomVecMesoMolecular::property_atom(char *name)
 {
   if (strcmp(name,"rho") == 0) return 0;
   if (strcmp(name,"drho") == 0) return 1;
   if (strcmp(name,"e") == 0) return 2;
   if (strcmp(name,"de") == 0) return 3;
   if (strcmp(name,"cv") == 0) return 4;
+  if (strcmp(name,"mol") == 0) return 5;
   return -1;
 }
 
@@ -969,7 +1007,7 @@ int AtomVecMeso::property_atom(char *name)
    index maps to data specific to this atom style
 ------------------------------------------------------------------------- */
 
-void AtomVecMeso::pack_property_atom(int index, double *buf,
+void AtomVecMesoMolecular::pack_property_atom(int index, double *buf,
                                      int nvalues, int groupbit)
 {
   int *mask = atom->mask;
@@ -1006,6 +1044,12 @@ void AtomVecMeso::pack_property_atom(int index, double *buf,
       else buf[n] = 0.0;
       n += nvalues;
     }
+  } else if (index == 5) {
+    for (int i = 0; i < nlocal; i++) {
+      if (mask[i] & groupbit) buf[n] = ubuf(molecule[i]).d;
+      else buf[n] = 0.0;
+      n += nvalues;
+    }
   }
 }
 
@@ -1013,7 +1057,7 @@ void AtomVecMeso::pack_property_atom(int index, double *buf,
    return # of bytes of allocated memory
    ------------------------------------------------------------------------- */
 
-bigint AtomVecMeso::memory_usage() {
+bigint AtomVecMesoMolecular::memory_usage() {
   bigint bytes = 0;
 
   if (atom->memcheck("tag"))
@@ -1030,6 +1074,8 @@ bigint AtomVecMeso::memory_usage() {
     bytes += memory->usage(v, nmax, 3);
   if (atom->memcheck("f"))
     bytes += memory->usage(f, nmax*comm->nthreads, 3);
+  if (atom->memcheck("molecule")) 
+    bytes += memory->usage(molecule,nmax);
   if (atom->memcheck("rho"))
     bytes += memory->usage(rho, nmax);
   if (atom->memcheck("drho"))

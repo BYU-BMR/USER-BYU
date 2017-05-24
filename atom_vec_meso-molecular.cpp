@@ -431,7 +431,7 @@ void AtomVecMesoMolecular::unpack_reverse(int n, int *list, double *buf) {
     f[j][2] += buf[m++];
     drho[j] += buf[m++];
     de[j] += buf[m++];
-    molecule[i] = (tagint) ubuf(buf[m++]).i;
+    molecule[j] = (tagint) ubuf(buf[m++]).i;
   }
 }
 

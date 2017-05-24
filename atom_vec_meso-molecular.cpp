@@ -670,7 +670,6 @@ void AtomVecMesoMolecular::unpack_border_vel(int n, int first, double *buf) {
    ------------------------------------------------------------------------- */
 
 int AtomVecMesoMolecular::pack_exchange(int i, double *buf) {
-  //printf("in AtomVecMesoMolecular::pack_exchange\n");
   int m = 1;
   buf[m++] = x[i][0];
   buf[m++] = x[i][1];
@@ -701,7 +700,6 @@ int AtomVecMesoMolecular::pack_exchange(int i, double *buf) {
 /* ---------------------------------------------------------------------- */
 
 int AtomVecMesoMolecular::unpack_exchange(double *buf) {
-  //printf("in AtomVecMesoMolecular::unpack_exchange\n");
   int nlocal = atom->nlocal;
   if (nlocal == nmax)
     grow(0);
@@ -886,8 +884,6 @@ void AtomVecMesoMolecular::data_atom(double *coord, imageint imagetmp, char **va
   x[nlocal][1] = coord[1];
   x[nlocal][2] = coord[2];
 
-  //printf("rho=%f, e=%f, cv=%f, x=%f\n", rho[nlocal], e[nlocal], cv[nlocal], x[nlocal][0]);
-
   image[nlocal] = imagetmp;
 
   mask[nlocal] = 1;
@@ -937,9 +933,6 @@ void AtomVecMesoMolecular::pack_data(double **buf)
     buf[i][6] = x[i][0];
     buf[i][7] = x[i][1];
     buf[i][8] = x[i][2];
-    buf[i][9] = ubuf((image[i] & IMGMASK) - IMGMAX).d;
-    buf[i][10] = ubuf((image[i] >> IMGBITS & IMGMASK) - IMGMAX).d;
-    buf[i][11] = ubuf((image[i] >> IMG2BITS) - IMGMAX).d;
   }
 }
 
@@ -964,15 +957,13 @@ void AtomVecMesoMolecular::write_data(FILE *fp, int n, double **buf)
 {
   for (int i = 0; i < n; i++)
     fprintf(fp,TAGINT_FORMAT
-            " %d %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e "
-            "%d %d %d\n",
+            " %d %d %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e \n",
             (tagint) ubuf(buf[i][0]).i,
             (tagint) ubuf(buf[i][1]).i,
             (int) ubuf(buf[i][2]).i,
             buf[i][3],buf[i][4],buf[i][5],
-            buf[i][6],buf[i][7],buf[i][8],
-            (int) ubuf(buf[i][9]).i,(int) ubuf(buf[i][10]).i,
-            (int) ubuf(buf[i][11]).i);
+            buf[i][6],buf[i][7],buf[i][8]
+  );
 }
 
 /* ----------------------------------------------------------------------
